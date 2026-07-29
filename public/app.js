@@ -1087,6 +1087,8 @@ async function renderPreview() {
     // The HTML was sanitized server-side against a strict allow-list.
     preview.innerHTML = data.html;
     lastRendered = markdown;
+    // The preview's height just changed; re-map the editor's position onto it.
+    requestAnimationFrame(alignPreviewToEditor);
   } catch (err) {
     if (err.name !== 'AbortError') console.warn('preview:', err);
   }
@@ -1635,20 +1637,49 @@ function setupDivider() {
   });
 }
 
+/** scrollRange is how far an element can actually scroll. */
+const scrollRange = (element) => Math.max(0, element.scrollHeight - element.clientHeight);
+
+/** syncLock names the pane currently driving a scroll, so the follower's own
+ *  scroll event cannot bounce back and fight it. */
+let syncLock = null;
+let syncRelease = 0;
+
+/** followScroll maps one pane's scroll position proportionally onto the other. */
+function followScroll(from, to) {
+  if (!state.settings.syncScroll) return;
+  if (syncLock && syncLock !== from) return;
+
+  const fromRange = scrollRange(from);
+  const toRange = scrollRange(to);
+  if (fromRange <= 0 || toRange <= 0) return;
+
+  syncLock = from;
+  to.scrollTop = (from.scrollTop / fromRange) * toRange;
+
+  clearTimeout(syncRelease);
+  syncRelease = setTimeout(() => { syncLock = null; }, 90);
+}
+
+/** alignPreviewToEditor re-applies the mapping after the preview is replaced,
+ *  which keeps the two panes together while typing near the bottom. */
+function alignPreviewToEditor() {
+  if (!state.settings.syncScroll || syncLock) return;
+  const editor = $('editor');
+  const previewPane = $('pane-preview');
+  const editorRange = scrollRange(editor);
+  const previewRange = scrollRange(previewPane);
+  if (editorRange <= 0 || previewRange <= 0) return;
+  previewPane.scrollTop = (editor.scrollTop / editorRange) * previewRange;
+}
+
 function setupScrollSync() {
   const editor = $('editor');
   const previewPane = $('pane-preview');
-  let syncing = false;
 
-  editor.addEventListener('scroll', () => {
-    if (!state.settings.syncScroll || syncing) return;
-    const range = editor.scrollHeight - editor.clientHeight;
-    if (range <= 0) return;
-    syncing = true;
-    const ratio = editor.scrollTop / range;
-    previewPane.scrollTop = ratio * (previewPane.scrollHeight - previewPane.clientHeight);
-    requestAnimationFrame(() => { syncing = false; });
-  });
+  // Scrolling either pane moves the other.
+  editor.addEventListener('scroll', () => followScroll(editor, previewPane), { passive: true });
+  previewPane.addEventListener('scroll', () => followScroll(previewPane, editor), { passive: true });
 }
 
 /* ── Editor conveniences ─────────────────────────────────────────────────── */
