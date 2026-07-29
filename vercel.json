@@ -17,6 +17,11 @@
       },
       "continue": true
     },
+    {
+      "src": "/(?:index\\.html|login\\.html|app\\.css|app\\.js|login\\.js)?",
+      "headers": { "Cache-Control": "public, max-age=0, must-revalidate" },
+      "continue": true
+    },
     { "src": "/api/(.*)", "dest": "/api/index.go" },
     { "src": "/favicon.svg", "headers": { "Cache-Control": "public, max-age=86400" }, "dest": "/public/favicon.svg" },
     { "src": "/", "dest": "/public/index.html" },

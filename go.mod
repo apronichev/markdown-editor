@@ -1,6 +1,6 @@
 module github.com/art-pro/markdown-editor
 
-go 1.23.0
+go 1.26.0
 
 require (
 	github.com/alecthomas/chroma/v2 v2.14.0
