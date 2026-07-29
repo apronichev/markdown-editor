@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Markdown Editor</title>
+<meta name="description" content="A Markdown editor and organizer backed by your own GitHub repositories.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/api/assets/document.css">
+<link rel="stylesheet" href="/api/assets/highlight.css">
+</head>
+<body class="app-loading">
+
+<div class="app" id="app">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-scroll">
+
+      <section class="side-group" data-group="account">
+        <div class="side-group-head">
+          <button class="side-group-toggle" type="button" data-toggle-group="account">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-plug"/></svg>
+            <span>Account</span>
+          </button>
+          <button class="side-group-chevron" type="button" data-toggle-group="account"
+                  tabindex="-1" aria-hidden="true">
+            <svg class="icon chevron" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </button>
+        </div>
+        <div class="side-group-body" id="account-body">
+          <div class="side-row" id="account-row">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-github"/></svg>
+            <span class="side-row-label" id="account-login">Not connected</span>
+            <button class="side-link" type="button" id="account-action">Link</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="side-group" data-group="repos">
+        <div class="side-group-head">
+          <button class="side-group-toggle" type="button" data-toggle-group="repos">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-repo"/></svg>
+            <span>Repositories</span>
+          </button>
+          <button class="side-group-chevron" type="button" data-toggle-group="repos"
+                  tabindex="-1" aria-hidden="true">
+            <svg class="icon chevron" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </button>
+        </div>
+        <div class="side-group-body" id="repos-body">
+          <ul class="repo-list" id="repo-list"></ul>
+          <button class="side-add" type="button" id="connect-repo">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-plus"/></svg>
+            Connect a repository
+          </button>
+        </div>
+      </section>
+
+      <section class="side-group" data-group="branch">
+        <div class="side-group-head">
+          <button class="side-group-toggle" type="button" data-toggle-group="branch">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-branch"/></svg>
+            <span>Branch</span>
+          </button>
+          <button class="side-group-chevron" type="button" data-toggle-group="branch"
+                  tabindex="-1" aria-hidden="true">
+            <svg class="icon chevron" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </button>
+        </div>
+        <div class="side-group-body" id="branch-body">
+          <select class="side-select" id="branch-select" aria-label="Active branch"></select>
+        </div>
+      </section>
+
+      <section class="side-group side-group-grow" data-group="documents">
+        <div class="side-group-head">
+          <button class="side-group-toggle" type="button" data-toggle-group="documents">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-file"/></svg>
+            <span>Documents</span>
+          </button>
+          <span class="side-head-actions">
+            <button class="side-icon-btn" type="button" id="new-folder" title="New folder" aria-label="New folder">
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-folder-plus"/></svg>
+            </button>
+            <button class="side-icon-btn" type="button" id="refresh-tree" title="Refresh" aria-label="Refresh documents">
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-refresh"/></svg>
+            </button>
+          </span>
+          <button class="side-group-chevron" type="button" data-toggle-group="documents"
+                  tabindex="-1" aria-hidden="true">
+            <svg class="icon chevron" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </button>
+        </div>
+        <div class="side-group-body" id="documents-body">
+          <div class="tree-filter">
+            <input type="search" id="tree-filter" placeholder="Filter documents" aria-label="Filter documents" autocomplete="off">
+          </div>
+          <ul class="doc-tree" id="doc-tree" aria-label="Documents"></ul>
+          <p class="side-empty" id="tree-empty">Connect a repository to see its Markdown files.</p>
+        </div>
+      </section>
+
+    </div>
+
+    <div class="sidebar-actions">
+      <button class="btn btn-accent" type="button" id="new-document">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-plus"/></svg>
+        New Document
+      </button>
+      <button class="btn btn-muted" type="button" id="commit-push">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-upload"/></svg>
+        Commit &amp; Push
+      </button>
+      <button class="btn btn-danger" type="button" id="delete-document">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-trash"/></svg>
+        Delete Document
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── Main ────────────────────────────────────────────────────────────── -->
+  <div class="main">
+
+    <header class="topbar">
+      <button class="icon-btn" type="button" id="toggle-sidebar" title="Toggle sidebar (⌘\)" aria-label="Toggle sidebar">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-menu"/></svg>
+      </button>
+      <span class="brand">MARKDOWN</span>
+
+      <div class="topbar-spacer"></div>
+
+      <button class="top-btn" type="button" id="import-file">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-import"/></svg>
+        Import
+      </button>
+
+      <div class="menu-wrap">
+        <button class="top-btn" type="button" id="export-btn" aria-haspopup="true" aria-expanded="false">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-download"/></svg>
+          Export as
+        </button>
+        <div class="menu" id="export-menu" role="menu" hidden></div>
+      </div>
+
+      <button class="icon-btn" type="button" id="toggle-preview" title="Toggle preview (⌘P)" aria-label="Toggle preview">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-eye"/></svg>
+      </button>
+      <button class="icon-btn" type="button" id="toggle-zen" title="Focus mode" aria-label="Focus mode">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-expand"/></svg>
+      </button>
+      <button class="icon-btn" type="button" id="open-settings" title="Settings" aria-label="Settings">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-gear"/></svg>
+      </button>
+      <button class="icon-btn" type="button" id="open-help" title="Help" aria-label="Help">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-help"/></svg>
+      </button>
+    </header>
+
+    <div class="doc-header">
+      <h1 class="doc-title" id="doc-title">Untitled Document.md</h1>
+      <span class="doc-status" id="doc-status">Draft</span>
+      <button class="icon-btn small" type="button" id="rename-document" title="Rename or move" aria-label="Rename or move">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-pencil"/></svg>
+      </button>
+      <div class="topbar-spacer"></div>
+      <span class="doc-location" id="doc-location"></span>
+    </div>
+
+    <div class="panes" id="panes">
+      <div class="pane pane-editor" id="pane-editor">
+        <textarea id="editor" class="editor" spellcheck="true" autocomplete="off"
+                  aria-label="Markdown source" placeholder="# Start writing…"></textarea>
+      </div>
+      <div class="pane-divider" id="pane-divider" role="separator" aria-orientation="vertical"
+           tabindex="0" aria-label="Resize editor and preview"></div>
+      <div class="pane pane-preview" id="pane-preview">
+        <article class="markdown-body" id="preview"></article>
+      </div>
+    </div>
+
+    <footer class="statusbar">
+      <span id="counts">0 words · 0 characters</span>
+      <div class="topbar-spacer"></div>
+      <span id="sync-note"></span>
+    </footer>
+  </div>
+</div>
+
+<!-- ── Overlays ──────────────────────────────────────────────────────────── -->
+<div class="overlay" id="overlay" hidden></div>
+
+<div class="dialog" id="dialog-prompt" role="dialog" aria-modal="true" aria-labelledby="prompt-title" hidden>
+  <h2 id="prompt-title">Title</h2>
+  <p class="dialog-hint" id="prompt-hint"></p>
+  <form id="prompt-form">
+    <input type="text" id="prompt-input" autocomplete="off" spellcheck="false">
+    <p class="dialog-error" id="prompt-error" hidden></p>
+    <div class="dialog-actions">
+      <button class="btn btn-ghost" type="button" data-close-dialog>Cancel</button>
+      <button class="btn btn-accent" type="submit" id="prompt-confirm">OK</button>
+    </div>
+  </form>
+</div>
+
+<div class="dialog" id="dialog-confirm" role="dialog" aria-modal="true" aria-labelledby="confirm-title" hidden>
+  <h2 id="confirm-title">Are you sure?</h2>
+  <p class="dialog-hint" id="confirm-body"></p>
+  <div class="dialog-actions">
+    <button class="btn btn-ghost" type="button" data-close-dialog>Cancel</button>
+    <button class="btn btn-danger" type="button" id="confirm-ok">Delete</button>
+  </div>
+</div>
+
+<div class="dialog dialog-wide" id="dialog-repos" role="dialog" aria-modal="true" aria-labelledby="repos-title" hidden>
+  <h2 id="repos-title">Connect repositories</h2>
+  <p class="dialog-hint">Private repositories are included. Connect as many as you like — each keeps its own branch.</p>
+  <input type="search" id="repo-search" placeholder="Search your repositories" autocomplete="off" aria-label="Search repositories">
+  <ul class="repo-picker" id="repo-picker"></ul>
+  <p class="dialog-error" id="repos-error" hidden></p>
+  <div class="dialog-actions">
+    <button class="btn btn-ghost" type="button" data-close-dialog>Close</button>
+  </div>
+</div>
+
+<div class="dialog" id="dialog-commit" role="dialog" aria-modal="true" aria-labelledby="commit-title" hidden>
+  <h2 id="commit-title">Commit &amp; push</h2>
+  <p class="dialog-hint" id="commit-target"></p>
+  <form id="commit-form">
+    <label class="field-label" for="commit-message">Commit message</label>
+    <input type="text" id="commit-message" autocomplete="off">
+    <p class="dialog-error" id="commit-error" hidden></p>
+    <div class="dialog-actions">
+      <button class="btn btn-ghost" type="button" data-close-dialog>Cancel</button>
+      <button class="btn btn-accent" type="submit" id="commit-confirm">Push to GitHub</button>
+    </div>
+  </form>
+</div>
+
+<div class="dialog" id="dialog-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <h2 id="settings-title">Settings</h2>
+  <div class="setting-row">
+    <label class="field-label" for="setting-view">Layout</label>
+    <select id="setting-view">
+      <option value="split">Editor and preview</option>
+      <option value="editor">Editor only</option>
+      <option value="preview">Preview only</option>
+    </select>
+  </div>
+  <div class="setting-row">
+    <label class="field-label" for="setting-font">Editor text size</label>
+    <select id="setting-font">
+      <option value="12">12 px</option>
+      <option value="13">13 px</option>
+      <option value="14">14 px</option>
+      <option value="15">15 px</option>
+      <option value="16">16 px</option>
+      <option value="18">18 px</option>
+    </select>
+  </div>
+  <div class="setting-row setting-check">
+    <input type="checkbox" id="setting-sync-scroll">
+    <label for="setting-sync-scroll">Sync preview scrolling with the editor</label>
+  </div>
+  <div class="setting-row setting-check">
+    <input type="checkbox" id="setting-autodraft">
+    <label for="setting-autodraft">Keep unsaved drafts in this browser</label>
+  </div>
+  <hr class="dialog-rule">
+  <div class="dialog-actions">
+    <button class="btn btn-ghost" type="button" id="sign-out">Sign out</button>
+    <button class="btn btn-accent" type="button" data-close-dialog>Done</button>
+  </div>
+</div>
+
+<div class="dialog dialog-wide" id="dialog-help" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
+  <h2 id="help-title">Help</h2>
+  <h3>Keyboard shortcuts</h3>
+  <table class="help-table">
+    <tbody>
+      <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>S</kbd></td><td>Commit &amp; push the current document</td></tr>
+      <tr><td><kbd>⌘</kbd> + <kbd>B</kbd></td><td>Bold</td></tr>
+      <tr><td><kbd>⌘</kbd> + <kbd>I</kbd></td><td>Italic</td></tr>
+      <tr><td><kbd>⌘</kbd> + <kbd>K</kbd></td><td>Insert link</td></tr>
+      <tr><td><kbd>⌘</kbd> + <kbd>P</kbd></td><td>Toggle the preview pane</td></tr>
+      <tr><td><kbd>⌘</kbd> + <kbd>\</kbd></td><td>Toggle the sidebar</td></tr>
+      <tr><td><kbd>Tab</kbd></td><td>Indent (inside lists, nest the item)</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close a dialog or menu</td></tr>
+    </tbody>
+  </table>
+  <h3>How your files are handled</h3>
+  <ul class="help-list">
+    <li>Editing happens in your browser. Nothing is written to GitHub until you press <strong>Commit &amp; push</strong>.</li>
+    <li>Each save is a normal commit on the branch selected in the sidebar.</li>
+    <li>If someone else changed the file first, the push is refused instead of overwriting their work.</li>
+    <li>Drag a document onto a folder in the sidebar to move it; both the move and the delete happen in one commit.</li>
+    <li>Your GitHub token is held in an encrypted, HTTP-only cookie and is never exposed to page scripts.</li>
+  </ul>
+  <div class="dialog-actions">
+    <button class="btn btn-accent" type="button" data-close-dialog>Close</button>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<input type="file" id="file-input" accept=".md,.markdown,.mdown,.mkd,.mdx,.txt,text/markdown,text/plain" hidden>
+
+<!-- Icon sprite -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-menu" viewBox="0 0 16 16"><path d="M1.5 3.5h13M1.5 8h13M1.5 12.5h13" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 16 16"><path d="M4 6.5 8 10.5 12 6.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></symbol>
+  <symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></symbol>
+  <symbol id="i-repo" viewBox="0 0 16 16"><path fill="currentColor" d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75H4.5a1 1 0 0 0 0 2h8.75a.75.75 0 0 1 0 1.5H4.5A2.5 2.5 0 0 1 2 15V2.5Zm10.5-1H4.5a1 1 0 0 0-1 1v9.09c.317-.116.65-.176 1-.176h8V1.5Z"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 16 16"><path fill="currentColor" d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.492 2.492 0 0 1 6 7h4a1 1 0 0 0 1-1V5.372A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 16 16"><path fill="currentColor" d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 12.25 16h-8.5A1.75 1.75 0 0 1 2 14.25V1.75Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25V6H9.75A1.75 1.75 0 0 1 8 4.25V1.5H3.75ZM9.5 1.75v2.5c0 .138.112.25.25.25h2.5a.25.25 0 0 0 .177-.427L9.927 1.573A.25.25 0 0 0 9.5 1.75Z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path fill="currentColor" d="M1.75 1.5A1.75 1.75 0 0 0 0 3.25v9.5C0 13.716.784 14.5 1.75 14.5h12.5A1.75 1.75 0 0 0 16 12.75v-7A1.75 1.75 0 0 0 14.25 4H8.06L6.53 2.47a1.75 1.75 0 0 0-1.237-.513H1.75Z"/></symbol>
+  <symbol id="i-folder-plus" viewBox="0 0 16 16"><path fill="currentColor" d="M1.75 2A1.75 1.75 0 0 0 0 3.75v8.5C0 13.216.784 14 1.75 14h12.5A1.75 1.75 0 0 0 16 12.25v-6.5A1.75 1.75 0 0 0 14.25 4H8.5L7.28 2.78A1.75 1.75 0 0 0 6.04 2.27H1.75ZM8.75 7v1.75h1.75a.75.75 0 0 1 0 1.5H8.75V12a.75.75 0 0 1-1.5 0v-1.75H5.5a.75.75 0 0 1 0-1.5h1.75V7a.75.75 0 0 1 1.5 0Z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 2.5a5.5 5.5 0 1 0 5.27 7.1.75.75 0 0 1 1.44.42A7 7 0 1 1 8 1c1.9 0 3.62.76 4.88 2V2.25a.75.75 0 0 1 1.5 0v3a.75.75 0 0 1-.75.75h-3a.75.75 0 0 1 0-1.5h1.36A5.48 5.48 0 0 0 8 2.5Z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 16 16"><path fill="currentColor" d="M7.47 1.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 1 1-1.06 1.06L8.75 3.56v6.69a.75.75 0 0 1-1.5 0V3.56L5.28 5.53a.75.75 0 0 1-1.06-1.06l3.25-3.25ZM2.75 12.5a.75.75 0 0 1 .75.75v.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-.5a.75.75 0 0 1 1.5 0v.5A1.75 1.75 0 0 1 12.25 15.5h-8.5A1.75 1.75 0 0 1 2 13.75v-.5a.75.75 0 0 1 .75-.75Z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 16 16"><path fill="currentColor" d="M8.53 10.78a.75.75 0 0 1-1.06 0L4.22 7.53a.75.75 0 1 1 1.06-1.06L7.25 8.44V1.75a.75.75 0 0 1 1.5 0v6.69l1.97-1.97a.75.75 0 1 1 1.06 1.06l-3.25 3.25ZM2.75 12.5a.75.75 0 0 1 .75.75v.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-.5a.75.75 0 0 1 1.5 0v.5A1.75 1.75 0 0 1 12.25 15.5h-8.5A1.75 1.75 0 0 1 2 13.75v-.5a.75.75 0 0 1 .75-.75Z"/></symbol>
+  <symbol id="i-import" viewBox="0 0 16 16"><path fill="currentColor" d="M8.53 1.22a.75.75 0 0 0-1.06 0L4.22 4.47a.75.75 0 1 0 1.06 1.06L7.25 3.56v6.69a.75.75 0 0 0 1.5 0V3.56l1.97 1.97a.75.75 0 1 0 1.06-1.06L8.53 1.22ZM2.75 12.5a.75.75 0 0 1 .75.75v.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-.5a.75.75 0 0 1 1.5 0v.5a1.75 1.75 0 0 1-1.75 1.75h-8.5A1.75 1.75 0 0 1 2 13.75v-.5a.75.75 0 0 1 .75-.75Z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path fill="currentColor" d="M8 2c3.2 0 5.9 2 7.4 4.9.2.4.2.8 0 1.2C13.9 11 11.2 13 8 13S2.1 11 .6 8.1a1.3 1.3 0 0 1 0-1.2C2.1 4 4.8 2 8 2Zm0 1.5c-2.5 0-4.7 1.5-6 3.9 1.3 2.4 3.5 3.9 6 3.9s4.7-1.5 6-3.9c-1.3-2.4-3.5-3.9-6-3.9Zm0 1.6a2.3 2.3 0 1 1 0 4.6 2.3 2.3 0 0 1 0-4.6Z"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 16 16"><path fill="currentColor" d="M1.75 1h4a.75.75 0 0 1 0 1.5H3.56l3.22 3.22a.75.75 0 1 1-1.06 1.06L2.5 3.56v2.19a.75.75 0 0 1-1.5 0v-4A.75.75 0 0 1 1.75 1Zm12.5 14h-4a.75.75 0 0 1 0-1.5h2.19l-3.22-3.22a.75.75 0 1 1 1.06-1.06l3.22 3.22v-2.19a.75.75 0 0 1 1.5 0v4a.75.75 0 0 1-.75.75Z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0c.63 0 1.25.06 1.84.18l.3 1.6c.5.16.98.4 1.4.7l1.5-.6c.87.8 1.55 1.8 1.96 2.9l-1.2 1.1c.06.36.1.73.1 1.12s-.04.76-.1 1.12l1.2 1.1a7.98 7.98 0 0 1-1.96 2.9l-1.5-.6c-.42.3-.9.54-1.4.7l-.3 1.6A8.1 8.1 0 0 1 8 16c-.63 0-1.25-.06-1.84-.18l-.3-1.6c-.5-.16-.98-.4-1.4-.7l-1.5.6a7.98 7.98 0 0 1-1.96-2.9l1.2-1.1A6.9 6.9 0 0 1 2.1 9c0-.39.04-.76.1-1.12L1 6.78a7.98 7.98 0 0 1 1.96-2.9l1.5.6c.42-.3.9-.54 1.4-.7l.3-1.6A8.1 8.1 0 0 1 8 0Zm0 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"/></symbol>
+  <symbol id="i-help" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm0 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm0 9.25a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Zm.08-7c1.6 0 2.67.9 2.67 2.2 0 .9-.44 1.5-1.32 2.04-.6.38-.76.6-.76 1.06v.2a.68.68 0 0 1-1.36 0v-.3c0-.9.4-1.44 1.3-1.98.6-.37.78-.6.78-1.02 0-.54-.47-.9-1.3-.9-.8 0-1.3.36-1.42 1a.68.68 0 0 1-1.34-.24c.24-1.28 1.3-2.06 2.75-2.06Z"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 16 16"><path fill="currentColor" d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086ZM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064L11.189 6.25Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path fill="currentColor" d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.75a.75.75 0 0 1 0 1.5h-.44l-.68 8.86A1.75 1.75 0 0 1 10.89 15H5.11a1.75 1.75 0 0 1-1.74-1.64L2.69 4.5H2.25a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.2 4.5l.67 8.75c.01.13.12.25.25.25h5.76c.13 0 .24-.12.25-.25l.67-8.75H4.2Z"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 16 16"><path fill="currentColor" d="M5.5 0a.75.75 0 0 1 .75.75V4h3.5V.75a.75.75 0 0 1 1.5 0V4h.5a.75.75 0 0 1 .75.75v1.5A4.75 4.75 0 0 1 8.75 11v4.25a.75.75 0 0 1-1.5 0V11A4.75 4.75 0 0 1 3 6.25v-1.5A.75.75 0 0 1 3.75 4h.5V.75A.75.75 0 0 1 5 0h.5Z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><path fill="currentColor" d="M4 4a4 4 0 1 1 8 0v2h.25c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25v-5.5C2 6.784 2.784 6 3.75 6H4V4Zm1.5 2h5V4a2.5 2.5 0 0 0-5 0v2Z"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.25" fill="currentColor"/></symbol>
+</svg>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>
