@@ -82,7 +82,7 @@ func cleanPath(p string) (string, error) {
 	if strings.HasPrefix(cleaned, "../") || cleaned == ".." || strings.HasPrefix(cleaned, "/") {
 		return "", httpx.Errorf(http.StatusBadRequest, "path escapes the repository")
 	}
-	for _, segment := range strings.Split(cleaned, "/") {
+	for segment := range strings.SplitSeq(cleaned, "/") {
 		if segment == "" || segment == "." || segment == ".." {
 			return "", httpx.Errorf(http.StatusBadRequest, "path contains an empty or relative segment")
 		}

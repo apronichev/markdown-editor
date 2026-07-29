@@ -55,8 +55,7 @@ func Fail(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusInternalServerError
 	msg := "internal server error"
 
-	var he *Error
-	if errors.As(err, &he) {
+	if he, ok := errors.AsType[*Error](err); ok {
 		status = he.Status
 		msg = he.Message
 	}
@@ -74,8 +73,7 @@ func DecodeJSON(r *http.Request, maxBytes int64, dst any) error {
 	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxBytes))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		var maxErr *http.MaxBytesError
-		if errors.As(err, &maxErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return Errorf(http.StatusRequestEntityTooLarge, "request body too large")
 		}
 		return Wrap(http.StatusBadRequest, err, "malformed JSON body")

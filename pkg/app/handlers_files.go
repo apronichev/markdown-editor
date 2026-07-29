@@ -359,8 +359,7 @@ func (a *App) handleBatchCommit(w http.ResponseWriter, r *http.Request, sess *au
 			httpx.Fail(w, r, httpx.Errorf(http.StatusBadRequest, "%s has no content", filePath))
 			return
 		}
-		content := *change.Content
-		changes = append(changes, github.Change{Path: filePath, Content: &content})
+		changes = append(changes, github.Change{Path: filePath, Content: new(*change.Content)})
 	}
 
 	fallback := fmt.Sprintf("Update %d files", len(changes))

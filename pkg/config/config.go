@@ -2,6 +2,7 @@
 package config
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"errors"
 	"net/http"
@@ -39,17 +40,14 @@ func Load() (*Config, error) {
 	c := &Config{
 		GitHubClientID:     strings.TrimSpace(os.Getenv("GITHUB_CLIENT_ID")),
 		GitHubClientSecret: strings.TrimSpace(os.Getenv("GITHUB_CLIENT_SECRET")),
-		GitHubScopes:       strings.TrimSpace(os.Getenv("GITHUB_OAUTH_SCOPES")),
 		BaseURL:            strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/"),
-		GitHubAPIBaseURL:   strings.TrimRight(strings.TrimSpace(os.Getenv("GITHUB_API_BASE_URL")), "/"),
-		Dev:                os.Getenv("VERCEL") == "" && os.Getenv("MDE_DEV") != "0",
-	}
-	if c.GitHubScopes == "" {
 		// "repo" is the narrowest scope that can read *and* push to private repos.
-		c.GitHubScopes = "repo read:user"
-	}
-	if c.GitHubAPIBaseURL == "" {
-		c.GitHubAPIBaseURL = "https://api.github.com"
+		GitHubScopes: cmp.Or(strings.TrimSpace(os.Getenv("GITHUB_OAUTH_SCOPES")), "repo read:user"),
+		GitHubAPIBaseURL: cmp.Or(
+			strings.TrimRight(strings.TrimSpace(os.Getenv("GITHUB_API_BASE_URL")), "/"),
+			"https://api.github.com",
+		),
+		Dev: os.Getenv("VERCEL") == "" && os.Getenv("MDE_DEV") != "0",
 	}
 
 	secret := os.Getenv("SESSION_SECRET")
@@ -86,10 +84,7 @@ func (c *Config) BaseURLFor(r *http.Request) string {
 	} else if r.TLS == nil && isLoopback(r.Host) {
 		scheme = "http"
 	}
-	host := r.Header.Get("X-Forwarded-Host")
-	if host == "" {
-		host = r.Host
-	}
+	host := cmp.Or(r.Header.Get("X-Forwarded-Host"), r.Host)
 	return scheme + "://" + strings.Split(host, ",")[0]
 }
 
