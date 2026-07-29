@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/art-pro/markdown-editor/internal/app"
-	"github.com/art-pro/markdown-editor/internal/config"
+	"github.com/art-pro/markdown-editor/pkg/app"
+	"github.com/art-pro/markdown-editor/pkg/config"
 )
 
 // build is done once per cold start and reused by every warm invocation.

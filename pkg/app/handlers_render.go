@@ -7,10 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/art-pro/markdown-editor/internal/auth"
-	"github.com/art-pro/markdown-editor/internal/export"
-	"github.com/art-pro/markdown-editor/internal/httpx"
-	"github.com/art-pro/markdown-editor/internal/markdown"
+	"github.com/art-pro/markdown-editor/pkg/auth"
+	"github.com/art-pro/markdown-editor/pkg/export"
+	"github.com/art-pro/markdown-editor/pkg/httpx"
+	"github.com/art-pro/markdown-editor/pkg/markdown"
 )
 
 // maxDocumentBytes caps the Markdown source accepted for rendering or export.

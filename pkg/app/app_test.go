@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/art-pro/markdown-editor/internal/auth"
-	"github.com/art-pro/markdown-editor/internal/config"
+	"github.com/art-pro/markdown-editor/pkg/auth"
+	"github.com/art-pro/markdown-editor/pkg/config"
 )
 
 const testOrigin = "https://editor.example"

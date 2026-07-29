@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/art-pro/markdown-editor/internal/auth"
-	"github.com/art-pro/markdown-editor/internal/config"
-	"github.com/art-pro/markdown-editor/internal/github"
-	"github.com/art-pro/markdown-editor/internal/httpx"
+	"github.com/art-pro/markdown-editor/pkg/auth"
+	"github.com/art-pro/markdown-editor/pkg/config"
+	"github.com/art-pro/markdown-editor/pkg/github"
+	"github.com/art-pro/markdown-editor/pkg/httpx"
 )
 
 // App holds the request-independent state of the service.

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/art-pro/markdown-editor/internal/markdown"
+	"github.com/art-pro/markdown-editor/pkg/markdown"
 )
 
 //go:embed assets/document.css

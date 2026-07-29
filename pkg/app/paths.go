@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/art-pro/markdown-editor/internal/httpx"
+	"github.com/art-pro/markdown-editor/pkg/httpx"
 )
 
 // ownerRepoPattern matches the character set GitHub allows in owner and repo names.

@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/art-pro/markdown-editor/internal/auth"
-	"github.com/art-pro/markdown-editor/internal/github"
-	"github.com/art-pro/markdown-editor/internal/httpx"
+	"github.com/art-pro/markdown-editor/pkg/auth"
+	"github.com/art-pro/markdown-editor/pkg/github"
+	"github.com/art-pro/markdown-editor/pkg/httpx"
 )
 
 // handleListRepos returns one page of repositories the token can reach,

@@ -19,8 +19,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/art-pro/markdown-editor/internal/app"
-	"github.com/art-pro/markdown-editor/internal/config"
+	"github.com/art-pro/markdown-editor/pkg/app"
+	"github.com/art-pro/markdown-editor/pkg/config"
 )
 
 func main() {

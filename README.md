@@ -131,6 +131,28 @@ derived from the request. Remember to update the callback URL in the OAuth app.
 Until the environment variables are set, the app still deploys and the sign-in
 page explains exactly what is missing.
 
+### Check the build before you deploy
+
+`vercel build` runs the real builder locally and catches deployment problems
+without a round trip:
+
+```sh
+vercel build
+```
+
+A successful run writes `.vercel/output/functions/api/index.func` — if that
+directory is missing, the API would not have been deployed.
+
+**If you see “The pattern "api/index.go" defined in `functions` doesn't match any
+Serverless Functions inside the `api` directory”**, the entrypoint was not part
+of the deployment. Vercel only emits that when it cannot find `api/index.go` at
+all. When deploying through the Git integration, confirm the file is committed
+and pushed:
+
+```sh
+git ls-files api/        # must list api/index.go
+```
+
 ## Running locally
 
 ```sh
@@ -182,18 +204,30 @@ users to sign in again.
 ## Layout
 
 ```
-api/index.go              Vercel entrypoint; delegates to internal/app
+api/index.go              Vercel entrypoint; delegates to pkg/app
 cmd/server/main.go        Local dev server (same handler + static files)
-internal/app/             Router, handlers, path validation
-internal/auth/            OAuth flow, encrypted cookie sessions, CSRF
-internal/config/          Environment configuration
-internal/github/          GitHub REST client (repos, trees, blobs, commits)
-internal/markdown/        goldmark rendering + HTML sanitization
-internal/export/          Markdown, HTML, styled HTML, text and .docx output
-internal/httpx/           JSON helpers, error mapping, security headers
+pkg/app/                  Router, handlers, path validation
+pkg/auth/                 OAuth flow, encrypted cookie sessions, CSRF
+pkg/config/               Environment configuration
+pkg/github/               GitHub REST client (repos, trees, blobs, commits)
+pkg/markdown/             goldmark rendering + HTML sanitization
+pkg/export/               Markdown, HTML, styled HTML, text and .docx output
+pkg/httpx/                JSON helpers, error mapping, security headers
 public/                   Static frontend (no framework, no build step)
 vercel.json               Function config, API rewrites, security headers
 ```
+
+These packages live under `pkg/` rather than `internal/` on purpose. The Vercel
+Go builder compiles the entrypoint inside a generated module named `handler`, so
+`handler/api` importing `yourmodule/internal/...` trips Go's `internal`
+visibility rule and the build fails with:
+
+```
+imports handler/api
+  index.go: use of internal package .../internal/app not allowed
+```
+
+If you move these packages back under `internal/`, deployment will break.
 
 ## API
 

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/art-pro/markdown-editor/internal/config"
+	"github.com/art-pro/markdown-editor/pkg/config"
 )
 
 func testConfig(t *testing.T) *config.Config {

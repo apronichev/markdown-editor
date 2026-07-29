@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/art-pro/markdown-editor/internal/auth"
-	"github.com/art-pro/markdown-editor/internal/github"
-	"github.com/art-pro/markdown-editor/internal/httpx"
+	"github.com/art-pro/markdown-editor/pkg/auth"
+	"github.com/art-pro/markdown-editor/pkg/github"
+	"github.com/art-pro/markdown-editor/pkg/httpx"
 )
 
 // maxBodyBytes caps every JSON request body. Files themselves are capped at

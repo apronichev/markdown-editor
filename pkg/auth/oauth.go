@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/art-pro/markdown-editor/internal/config"
-	"github.com/art-pro/markdown-editor/internal/github"
-	"github.com/art-pro/markdown-editor/internal/httpx"
+	"github.com/art-pro/markdown-editor/pkg/config"
+	"github.com/art-pro/markdown-editor/pkg/github"
+	"github.com/art-pro/markdown-editor/pkg/httpx"
 )
 
 const (
