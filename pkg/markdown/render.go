@@ -108,6 +108,7 @@ func sanitizer() *bluemonday.Policy {
 		// Images: allow sizing hints, data: URIs (pasted images) and our proxy.
 		p.AllowAttrs("width", "height").Matching(regexp.MustCompile(`^[0-9]{1,4}$`)).OnElements("img")
 		p.AllowAttrs("loading").Matching(regexp.MustCompile(`^(?:lazy|eager)$`)).OnElements("img")
+		p.AllowAttrs("decoding").Matching(regexp.MustCompile(`^(?:async|sync|auto)$`)).OnElements("img")
 		p.AllowDataURIImages()
 
 		// Harmless semantic markup people do write by hand in Markdown files.
@@ -174,6 +175,7 @@ func rewriteAssets(fragment []byte, resolve func(string) string) ([]byte, error)
 			if node.Type != xhtml.ElementNode || node.Data != "img" {
 				return
 			}
+
 			for i, attr := range node.Attr {
 				if attr.Key != "src" || !isRelative(attr.Val) {
 					continue
@@ -182,6 +184,12 @@ func rewriteAssets(fragment []byte, resolve func(string) string) ([]byte, error)
 					node.Attr[i].Val = resolved
 				}
 			}
+
+			// Defer off-screen images. Every proxied image costs a request to our
+			// own function, so a long post with many screenshots would otherwise
+			// fire them all at once and starve the file and render endpoints.
+			setAttrIfAbsent(node, "loading", "lazy")
+			setAttrIfAbsent(node, "decoding", "async")
 		})
 	}
 
@@ -192,6 +200,17 @@ func rewriteAssets(fragment []byte, resolve func(string) string) ([]byte, error)
 		}
 	}
 	return out.Bytes(), nil
+}
+
+// setAttrIfAbsent adds an attribute only when the document does not set it,
+// so an explicit loading="eager" in the source is respected.
+func setAttrIfAbsent(node *xhtml.Node, key, value string) {
+	for _, attr := range node.Attr {
+		if attr.Key == key {
+			return
+		}
+	}
+	node.Attr = append(node.Attr, xhtml.Attribute{Key: key, Val: value})
 }
 
 func walk(n *xhtml.Node, fn func(*xhtml.Node)) {

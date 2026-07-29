@@ -1,9 +1,10 @@
 package app
 
 import (
+	"cmp"
 	"net/http"
 	"path"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -155,15 +156,17 @@ func (a *App) handleTree(w http.ResponseWriter, r *http.Request, sess *auth.Sess
 	}
 
 	// Folders first, then files, alphabetically within each folder.
-	sort.Slice(nodes, func(i, j int) bool {
-		di, dj := path.Dir(nodes[i].Path), path.Dir(nodes[j].Path)
-		if di != dj {
-			return di < dj
+	slices.SortFunc(nodes, func(a, b treeNode) int {
+		if c := cmp.Compare(path.Dir(a.Path), path.Dir(b.Path)); c != 0 {
+			return c
 		}
-		if nodes[i].Type != nodes[j].Type {
-			return nodes[i].Type == "dir"
+		if a.Type != b.Type {
+			if a.Type == "dir" {
+				return -1
+			}
+			return 1
 		}
-		return strings.ToLower(nodes[i].Path) < strings.ToLower(nodes[j].Path)
+		return cmp.Compare(strings.ToLower(a.Path), strings.ToLower(b.Path))
 	})
 
 	httpx.JSON(w, http.StatusOK, map[string]any{
@@ -210,13 +213,9 @@ func (a *App) handleRaw(w http.ResponseWriter, r *http.Request, sess *auth.Sessi
 		return
 	}
 
-	client := a.clientFor(sess)
-	file, err := client.GetFile(r.Context(), t.Owner, t.Repo, filePath, ref)
-	if err != nil {
-		failGitHub(w, r, err)
-		return
-	}
-	data, err := client.GetBlobRaw(r.Context(), t.Owner, t.Repo, file.SHA)
+	// One GitHub request, and a conditional one when the browser already has a
+	// copy: a document full of screenshots is otherwise the slowest thing here.
+	raw, err := a.clientFor(sess).RawFile(r.Context(), t.Owner, t.Repo, filePath, ref, r.Header.Get("If-None-Match"))
 	if err != nil {
 		failGitHub(w, r, err)
 		return
@@ -226,11 +225,18 @@ func (a *App) handleRaw(w http.ResponseWriter, r *http.Request, sess *auth.Sessi
 	h.Set("Content-Type", contentType)
 	h.Set("Content-Disposition", "inline")
 	h.Set("X-Content-Type-Options", "nosniff")
-	// Blob content is immutable for a given SHA, but the URL is keyed by ref, so
-	// keep the cache private and short.
-	h.Set("Cache-Control", "private, max-age=300")
-	h.Set("Content-Length", strconv.Itoa(len(data)))
-	if _, err := w.Write(data); err != nil {
+	// The URL is keyed by a mutable ref, so revalidate rather than trusting a
+	// long lifetime; the ETag makes revalidation cheap.
+	h.Set("Cache-Control", "private, max-age=600, must-revalidate")
+	if raw.ETag != "" {
+		h.Set("ETag", raw.ETag)
+	}
+	if raw.NotModified {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	h.Set("Content-Length", strconv.Itoa(len(raw.Data)))
+	if _, err := w.Write(raw.Data); err != nil {
 		return
 	}
 }

@@ -133,3 +133,34 @@ func TestHighlightCSSIsGenerated(t *testing.T) {
 		t.Errorf("expected chroma classes in generated CSS, got %d bytes", len(css))
 	}
 }
+
+// TestRenderLazyLoadsImages guards the performance fix: every proxied image is a
+// request to our own function, so off-screen ones must not load up front.
+func TestRenderLazyLoadsImages(t *testing.T) {
+	source := "![a](img/a.png)\n\n![b](https://example.com/b.png)\n"
+	html, err := Render([]byte(source), Options{
+		ResolveAsset: func(src string) string { return "/proxy/" + src },
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	if strings.Count(html, `loading="lazy"`) != 2 {
+		t.Errorf("expected both images lazy, got: %s", html)
+	}
+	if strings.Count(html, `decoding="async"`) != 2 {
+		t.Errorf("expected both images async-decoded, got: %s", html)
+	}
+}
+
+func TestRenderRespectsExplicitEagerLoading(t *testing.T) {
+	html, err := Render([]byte(`<img src="img/hero.png" loading="eager">`), Options{
+		ResolveAsset: func(src string) string { return "/proxy/" + src },
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(html, `loading="eager"`) || strings.Contains(html, `loading="lazy"`) {
+		t.Errorf("an explicit loading attribute should win, got: %s", html)
+	}
+}

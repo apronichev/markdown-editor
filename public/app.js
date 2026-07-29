@@ -354,7 +354,33 @@ function readDraft(key) {
 }
 
 function dropDraft(doc) {
+  // Cancel any queued write for this document first: letting it fire after the
+  // draft was dropped would resurrect it right after a successful push.
+  if (draftPending && draftPending.key === doc.key) {
+    clearTimeout(draftTimer);
+    draftPending = null;
+  }
   try { localStorage.removeItem(draftKey(doc)); } catch { /* ignore */ }
+}
+
+/* Persisting a draft serializes the whole document and writes it synchronously.
+ * Doing that on every keystroke is fine for a short note and painful for a large
+ * one, so coalesce the writes and flush whenever the page might go away. */
+let draftTimer = null;
+let draftPending = null;
+
+function queueDraftSave(doc) {
+  draftPending = doc;
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(flushDraftSave, 600);
+}
+
+function flushDraftSave() {
+  clearTimeout(draftTimer);
+  if (!draftPending) return;
+  const doc = draftPending;
+  draftPending = null;
+  saveDraft(doc);
 }
 
 /** restoreDrafts brings saved drafts back into memory on load.
@@ -1028,9 +1054,16 @@ function onEditorInput() {
   const doc = activeDoc();
   if (doc) {
     doc.content = $('editor').value;
-    saveDraft(doc);
+    queueDraftSave(doc);
     renderDocHeader();
-    renderTree();
+    // Rebuilding the sidebar on every keystroke is pure waste: the only thing
+    // that can change there is the unsaved-changes dot. On a large document that
+    // per-keystroke DOM rebuild is felt directly.
+    const dirty = isDirty(doc);
+    if (doc.shownDirty !== dirty) {
+      doc.shownDirty = dirty;
+      renderTree();
+    }
   }
   updateCounts();
   schedulePreview();
@@ -1041,6 +1074,22 @@ function onEditorInput() {
 let previewTimer = null;
 let previewAbort = null;
 let lastRendered = null;
+
+/* Rendering happens on the server, so switching documents used to mean a network
+ * round trip every time — including back to one just viewed. Keep the last few
+ * results keyed by document so revisits paint immediately. */
+const renderCache = new Map();
+const RENDER_CACHE_LIMIT = 12;
+
+function cacheRender(key, markdown, html) {
+  if (!key) return;
+  renderCache.delete(key);
+  renderCache.set(key, { markdown, html });
+  // Map preserves insertion order, so the first key is the least recently used.
+  while (renderCache.size > RENDER_CACHE_LIMIT) {
+    renderCache.delete(renderCache.keys().next().value);
+  }
+}
 
 function schedulePreview(delay = 320) {
   clearTimeout(previewTimer);
@@ -1059,11 +1108,22 @@ async function renderPreview() {
   }
   if (markdown === lastRendered) return;
 
+  const doc = activeDoc();
+  const cacheKey = doc ? doc.key : '';
+
+  // A revisited document with unchanged text needs no server round trip.
+  const cached = renderCache.get(cacheKey);
+  if (cached && cached.markdown === markdown) {
+    preview.innerHTML = cached.html;
+    lastRendered = markdown;
+    requestAnimationFrame(alignPreviewToEditor);
+    return;
+  }
+
   if (previewAbort) previewAbort.abort();
   previewAbort = new AbortController();
   const signal = previewAbort.signal;
 
-  const doc = activeDoc();
   const body = { markdown };
   if (doc && doc.repoFullName) {
     const repo = repoOf(doc.repoFullName);
@@ -1087,6 +1147,7 @@ async function renderPreview() {
     // The HTML was sanitized server-side against a strict allow-list.
     preview.innerHTML = data.html;
     lastRendered = markdown;
+    cacheRender(cacheKey, markdown, data.html);
     // The preview's height just changed; re-map the editor's position onto it.
     requestAnimationFrame(alignPreviewToEditor);
   } catch (err) {
@@ -2011,7 +2072,15 @@ function wireEvents() {
   });
   $('export-menu').addEventListener('click', (event) => event.stopPropagation());
 
+  // Make sure a coalesced draft write is not lost when the page goes away.
+  // visibilitychange is the reliable one; beforeunload does not always fire.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushDraftSave();
+  });
+  window.addEventListener('pagehide', flushDraftSave);
+
   window.addEventListener('beforeunload', (event) => {
+    flushDraftSave();
     const dirty = [...state.docs.values()].some(isDirty);
     if (!dirty) return;
     if (state.settings.drafts) return; // drafts survive a reload

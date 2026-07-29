@@ -1,7 +1,6 @@
 package github
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -78,7 +77,7 @@ func TestCurrentUserSendsAuthHeaders(t *testing.T) {
 	s := newStub(t)
 	s.on(http.MethodGet, "/user", http.StatusOK, `{"login":"octocat","name":"Mona","avatar_url":"https://x/y.png"}`)
 
-	user, err := s.client().CurrentUser(context.Background())
+	user, err := s.client().CurrentUser(t.Context())
 	if err != nil {
 		t.Fatalf("CurrentUser: %v", err)
 	}
@@ -111,7 +110,7 @@ func TestListReposMapsFieldsAndPagination(t *testing.T) {
 		]`))
 	}
 
-	repos, hasMore, err := s.client().ListRepos(context.Background(), 1, 100)
+	repos, hasMore, err := s.client().ListRepos(t.Context(), 1, 100)
 	if err != nil {
 		t.Fatalf("ListRepos: %v", err)
 	}
@@ -140,7 +139,7 @@ func TestGetFileDecodesBase64(t *testing.T) {
 	s.on(http.MethodGet, "/repos/octocat/notes/contents/docs/readme.md", http.StatusOK,
 		`{"type":"file","path":"docs/readme.md","sha":"abc123","size":15,"encoding":"base64","content":"`+wrapped+`"}`)
 
-	file, err := s.client().GetFile(context.Background(), "octocat", "notes", "docs/readme.md", "main")
+	file, err := s.client().GetFile(t.Context(), "octocat", "notes", "docs/readme.md", "main")
 	if err != nil {
 		t.Fatalf("GetFile: %v", err)
 	}
@@ -159,7 +158,7 @@ func TestGetFileRejectsDirectories(t *testing.T) {
 	s := newStub(t)
 	s.on(http.MethodGet, "/repos/octocat/notes/contents/docs", http.StatusOK, `{"type":"dir","path":"docs"}`)
 
-	if _, err := s.client().GetFile(context.Background(), "octocat", "notes", "docs", ""); err == nil {
+	if _, err := s.client().GetFile(t.Context(), "octocat", "notes", "docs", ""); err == nil {
 		t.Error("expected an error when the path is a directory")
 	}
 }
@@ -169,7 +168,7 @@ func TestGetFileRejectsOversizedFiles(t *testing.T) {
 	s.on(http.MethodGet, "/repos/octocat/notes/contents/big.md", http.StatusOK,
 		`{"type":"file","path":"big.md","sha":"s","size":9999999,"encoding":"base64","content":""}`)
 
-	_, err := s.client().GetFile(context.Background(), "octocat", "notes", "big.md", "")
+	_, err := s.client().GetFile(t.Context(), "octocat", "notes", "big.md", "")
 	if err == nil || !strings.Contains(err.Error(), "2 MiB") {
 		t.Errorf("err = %v, want a size complaint", err)
 	}
@@ -180,7 +179,7 @@ func TestPutFileSendsBase64AndSHA(t *testing.T) {
 	s.on(http.MethodPut, "/repos/octocat/notes/contents/docs/readme.md", http.StatusOK,
 		`{"content":{"sha":"newsha","path":"docs/readme.md"},"commit":{"sha":"c1","html_url":"https://github.com/x"}}`)
 
-	commit, err := s.client().PutFile(context.Background(), "octocat", "notes",
+	commit, err := s.client().PutFile(t.Context(), "octocat", "notes",
 		"docs/readme.md", "new body", "Update readme", "main", "oldsha")
 	if err != nil {
 		t.Fatalf("PutFile: %v", err)
@@ -204,7 +203,7 @@ func TestPutFileOmitsSHAWhenCreating(t *testing.T) {
 	s.on(http.MethodPut, "/repos/octocat/notes/contents/new.md", http.StatusCreated,
 		`{"content":{"sha":"s","path":"new.md"},"commit":{"sha":"c"}}`)
 
-	if _, err := s.client().PutFile(context.Background(), "octocat", "notes", "new.md", "x", "Create", "main", ""); err != nil {
+	if _, err := s.client().PutFile(t.Context(), "octocat", "notes", "new.md", "x", "Create", "main", ""); err != nil {
 		t.Fatalf("PutFile: %v", err)
 	}
 	if _, present := s.find(http.MethodPut, "/repos/octocat/notes/contents/new.md").Body["sha"]; present {
@@ -214,7 +213,7 @@ func TestPutFileOmitsSHAWhenCreating(t *testing.T) {
 
 func TestDeleteFileRequiresSHA(t *testing.T) {
 	s := newStub(t)
-	if _, err := s.client().DeleteFile(context.Background(), "o", "r", "a.md", "msg", "main", ""); err == nil {
+	if _, err := s.client().DeleteFile(t.Context(), "o", "r", "a.md", "msg", "main", ""); err == nil {
 		t.Error("DeleteFile should refuse to run without a SHA")
 	}
 }
@@ -237,7 +236,7 @@ func TestCommitChangesBuildsATreeCommit(t *testing.T) {
 		{Path: "docs/edited.md", Content: &newBody}, // upload fresh text
 	}
 
-	commit, err := s.client().CommitChanges(context.Background(), "octocat", "notes", "main", "Reorganize", changes)
+	commit, err := s.client().CommitChanges(t.Context(), "octocat", "notes", "main", "Reorganize", changes)
 	if err != nil {
 		t.Fatalf("CommitChanges: %v", err)
 	}
@@ -301,7 +300,7 @@ func TestCommitChangesBuildsATreeCommit(t *testing.T) {
 
 func TestCommitChangesRejectsEmptyChangeSet(t *testing.T) {
 	s := newStub(t)
-	if _, err := s.client().CommitChanges(context.Background(), "o", "r", "main", "m", nil); err == nil {
+	if _, err := s.client().CommitChanges(t.Context(), "o", "r", "main", "m", nil); err == nil {
 		t.Error("expected an error for an empty change set")
 	}
 }
@@ -312,7 +311,7 @@ func TestCommitChangesRejectsChangeWithoutContent(t *testing.T) {
 	s.on(http.MethodGet, "/repos/o/r/git/commits/h", http.StatusOK, `{"tree":{"sha":"t"}}`)
 
 	changes := []Change{{Path: "a.md"}} // neither Content, SHA nor Delete
-	if _, err := s.client().CommitChanges(context.Background(), "o", "r", "main", "m", changes); err == nil {
+	if _, err := s.client().CommitChanges(t.Context(), "o", "r", "main", "m", changes); err == nil {
 		t.Error("expected an error for a change with no content")
 	}
 }
@@ -325,7 +324,7 @@ func TestGetTreeRequestsRecursiveListing(t *testing.T) {
 			{"path":"docs","mode":"040000","type":"tree","sha":"s2"}
 		]}`)
 
-	tree, err := s.client().GetTree(context.Background(), "o", "r", "main")
+	tree, err := s.client().GetTree(t.Context(), "o", "r", "main")
 	if err != nil {
 		t.Fatalf("GetTree: %v", err)
 	}
@@ -368,7 +367,7 @@ func TestErrorClassification(t *testing.T) {
 				_, _ = w.Write([]byte(tc.body))
 			}
 
-			_, err := s.client().CurrentUser(context.Background())
+			_, err := s.client().CurrentUser(t.Context())
 			if err == nil {
 				t.Fatal("expected an error")
 			}
@@ -391,7 +390,7 @@ func TestErrorIncludesFieldDetails(t *testing.T) {
 	s.on(http.MethodGet, "/user", http.StatusUnprocessableEntity,
 		`{"message":"Validation Failed","errors":[{"resource":"File","field":"path","code":"invalid","message":"path is bad"}]}`)
 
-	_, err := s.client().CurrentUser(context.Background())
+	_, err := s.client().CurrentUser(t.Context())
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -414,5 +413,71 @@ func TestEscapePath(t *testing.T) {
 		if got := escapePath(input); got != want {
 			t.Errorf("escapePath(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+// TestRawFileUsesOneRequest guards the performance fix: fetching an image used
+// to cost a metadata request plus a blob request, and transferred the bytes
+// twice because the first response was base64.
+func TestRawFileUsesOneRequest(t *testing.T) {
+	s := newStub(t)
+	s.routes["GET /repos/o/r/contents/img/shot.png"] = func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Accept"); got != "application/vnd.github.raw" {
+			t.Errorf("Accept = %q, want the raw media type", got)
+		}
+		w.Header().Set("ETag", `W/"abc123"`)
+		_, _ = w.Write([]byte("\x89PNGrawbytes"))
+	}
+
+	raw, err := s.client().RawFile(t.Context(), "o", "r", "img/shot.png", "main", "")
+	if err != nil {
+		t.Fatalf("RawFile: %v", err)
+	}
+	if string(raw.Data) != "\x89PNGrawbytes" {
+		t.Errorf("Data = %q", raw.Data)
+	}
+	if raw.ETag != `W/"abc123"` {
+		t.Errorf("ETag = %q", raw.ETag)
+	}
+	if raw.NotModified {
+		t.Error("NotModified should be false on a 200")
+	}
+	if len(s.requests) != 1 {
+		t.Errorf("made %d requests, want exactly 1", len(s.requests))
+	}
+	if q := s.requests[0].Query; q != "ref=main" {
+		t.Errorf("Query = %q, want ref=main", q)
+	}
+}
+
+func TestRawFilePassesConditionalRequestThrough(t *testing.T) {
+	s := newStub(t)
+	s.routes["GET /repos/o/r/contents/a.png"] = func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("If-None-Match"); got != `W/"etag"` {
+			t.Errorf("If-None-Match = %q, want it forwarded", got)
+		}
+		w.Header().Set("ETag", `W/"etag"`)
+		w.WriteHeader(http.StatusNotModified)
+	}
+
+	raw, err := s.client().RawFile(t.Context(), "o", "r", "a.png", "", `W/"etag"`)
+	if err != nil {
+		t.Fatalf("RawFile: %v", err)
+	}
+	if !raw.NotModified {
+		t.Error("expected NotModified for a 304")
+	}
+	if len(raw.Data) != 0 {
+		t.Errorf("a 304 must carry no body, got %d bytes", len(raw.Data))
+	}
+}
+
+func TestRawFileRejectsOversized(t *testing.T) {
+	s := newStub(t)
+	s.routes["GET /repos/o/r/contents/big.png"] = func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(make([]byte, (2<<20)+10))
+	}
+	if _, err := s.client().RawFile(t.Context(), "o", "r", "big.png", "", ""); err == nil {
+		t.Error("expected an oversized file to be rejected")
 	}
 }

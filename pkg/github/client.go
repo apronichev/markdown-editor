@@ -68,20 +68,20 @@ func (e *APIError) Error() string {
 
 // IsNotFound reports whether the resource is missing (or invisible to the token).
 func IsNotFound(err error) bool {
-	var ae *APIError
-	return errors.As(err, &ae) && ae.Status == http.StatusNotFound
+	ae, ok := errors.AsType[*APIError](err)
+	return ok && ae.Status == http.StatusNotFound
 }
 
 // IsConflict reports a stale-SHA write conflict.
 func IsConflict(err error) bool {
-	var ae *APIError
-	return errors.As(err, &ae) && (ae.Status == http.StatusConflict || ae.Status == http.StatusUnprocessableEntity)
+	ae, ok := errors.AsType[*APIError](err)
+	return ok && (ae.Status == http.StatusConflict || ae.Status == http.StatusUnprocessableEntity)
 }
 
 // Status maps a client error onto a sensible HTTP status for our own API.
 func Status(err error) (int, string) {
-	var ae *APIError
-	if !errors.As(err, &ae) {
+	ae, ok := errors.AsType[*APIError](err)
+	if !ok {
 		return http.StatusBadGateway, "GitHub request failed"
 	}
 	switch {
@@ -386,10 +386,32 @@ func (c *Client) GetFile(ctx context.Context, owner, repo, path, ref string) (*F
 	return &File{Path: payload.Path, SHA: payload.SHA, Size: payload.Size, Content: string(decoded), Encoding: "utf-8"}, nil
 }
 
-// GetBlobRaw returns raw bytes for a blob SHA, used to proxy images in previews.
-func (c *Client) GetBlobRaw(ctx context.Context, owner, repo, sha string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		c.baseURL+"/repos/"+esc(owner)+"/"+esc(repo)+"/git/blobs/"+esc(sha), nil)
+// RawContent is a file fetched as raw bytes, with GitHub's cache validator.
+type RawContent struct {
+	Data []byte
+	// ETag is GitHub's validator, suitable for returning to a browser.
+	ETag string
+	// NotModified is true when the caller's ifNoneMatch still holds, in which
+	// case Data is empty.
+	NotModified bool
+}
+
+// RawFile fetches a file's bytes in a single request.
+//
+// Asking the contents API for the raw media type returns the bytes directly,
+// which avoids both the two-step metadata-then-blob dance and the 33% base64
+// overhead. That matters a lot when a document embeds many images: each one used
+// to cost two GitHub round trips and roughly 2.3x its own size in transfer.
+//
+// Passing the browser's If-None-Match through lets GitHub answer 304, which
+// costs no bandwidth and does not count against the rate limit.
+func (c *Client) RawFile(ctx context.Context, owner, repo, path, ref, ifNoneMatch string) (*RawContent, error) {
+	endpoint := c.baseURL + "/repos/" + esc(owner) + "/" + esc(repo) + "/contents/" + escapePath(path)
+	if ref != "" {
+		endpoint += "?ref=" + url.QueryEscape(ref)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -397,16 +419,31 @@ func (c *Client) GetBlobRaw(ctx context.Context, owner, repo, sha string) ([]byt
 	req.Header.Set("Accept", "application/vnd.github.raw")
 	req.Header.Set("X-GitHub-Api-Version", apiVersion)
 	req.Header.Set("User-Agent", userAgent)
+	if ifNoneMatch != "" {
+		req.Header.Set("If-None-Match", ifNoneMatch)
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotModified {
+		return &RawContent{ETag: resp.Header.Get("ETag"), NotModified: true}, nil
+	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return nil, parseAPIError(resp)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, maxFileBytes+1))
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxFileBytes {
+		return nil, &APIError{Status: http.StatusRequestEntityTooLarge, Message: "file is larger than 2 MiB"}
+	}
+	return &RawContent{Data: data, ETag: resp.Header.Get("ETag")}, nil
 }
 
 func (c *Client) getBlob(ctx context.Context, owner, repo, sha string) (string, error) {
@@ -568,11 +605,9 @@ func (c *Client) CommitChanges(ctx context.Context, owner, repo, branch, message
 			if len(*ch.Content) > maxFileBytes {
 				return nil, &APIError{Status: http.StatusRequestEntityTooLarge, Message: "file is larger than 2 MiB: " + ch.Path}
 			}
-			content := *ch.Content
-			entry.Content = &content
+			entry.Content = new(*ch.Content)
 		case ch.SHA != "":
-			sha := ch.SHA
-			entry.SHA = &sha
+			entry.SHA = new(ch.SHA)
 		default:
 			return nil, &APIError{Status: http.StatusBadRequest, Message: "change for " + ch.Path + " has no content"}
 		}
