@@ -143,15 +143,33 @@ vercel build
 A successful run writes `.vercel/output/functions/api/index.func` — if that
 directory is missing, the API would not have been deployed.
 
-**If you see “The pattern "api/index.go" defined in `functions` doesn't match any
-Serverless Functions inside the `api` directory”**, the entrypoint was not part
-of the deployment. Vercel only emits that when it cannot find `api/index.go` at
-all. When deploying through the Git integration, confirm the file is committed
-and pushed:
+### Why `vercel.json` uses `builds` instead of `functions`
 
-```sh
-git ls-files api/        # must list api/index.go
+The obvious configuration is a `functions` block naming `api/index.go`, and it
+relies on Vercel auto-detecting the Go file in `api/` as a Serverless Function.
+That detection does not fire reliably for Go on the Vercel build environment, and
+when it doesn't the deploy fails before compiling anything:
+
 ```
+Error: The pattern "api/index.go" defined in `functions` doesn't match any
+Serverless Functions inside the `api` directory.
+```
+
+So the build is declared explicitly instead: `builds` names the entrypoint and
+the `@vercel/go` builder outright, which removes auto-detection from the picture.
+That choice has consequences worth knowing:
+
+- `builds` and `functions` are mutually exclusive, so per-function `memory` and
+  `maxDuration` overrides are not available; Vercel's defaults apply.
+- `builds` also replaces `rewrites`/`headers` with `routes`, which is why the
+  security headers and the `/api/*` mapping are expressed as routes.
+- With `@vercel/static`, the contents of `public/` are served from `/public/…`
+  internally, so the final route rewrites `/<path>` to `/public/<path>`.
+
+If you change `vercel.json`, run `vercel build` and confirm that
+`.vercel/output/functions/api/index.go.func` exists and that
+`.vercel/output/config.json` still maps `/api/(.*)` to `/api/index.go` before
+the catch-all static route.
 
 ## Running locally
 
@@ -214,7 +232,7 @@ pkg/markdown/             goldmark rendering + HTML sanitization
 pkg/export/               Markdown, HTML, styled HTML, text and .docx output
 pkg/httpx/                JSON helpers, error mapping, security headers
 public/                   Static frontend (no framework, no build step)
-vercel.json               Function config, API rewrites, security headers
+vercel.json               Explicit Go build, routes, security headers
 ```
 
 These packages live under `pkg/` rather than `internal/` on purpose. The Vercel

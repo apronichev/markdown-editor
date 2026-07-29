@@ -1,0 +1,20 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel
+
+# Build output
+/bin/
+/tmp/
+*.test
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Machine-local agent settings
+.claude/settings.local.json
