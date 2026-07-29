@@ -43,19 +43,24 @@ const defaultSettings = {
   editorFraction: 1,
 };
 
+const emptyStore = () => ({
+  repos: [], activeRepo: null, settings: { ...defaultSettings }, expanded: [], bookmarks: [],
+});
+
 function loadStore() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (!raw) return { repos: [], activeRepo: null, settings: { ...defaultSettings }, expanded: [] };
+    if (!raw) return emptyStore();
     const parsed = JSON.parse(raw);
     return {
       repos: Array.isArray(parsed.repos) ? parsed.repos : [],
       activeRepo: parsed.activeRepo || null,
       settings: { ...defaultSettings, ...(parsed.settings || {}) },
       expanded: Array.isArray(parsed.expanded) ? parsed.expanded : [],
+      bookmarks: Array.isArray(parsed.bookmarks) ? parsed.bookmarks : [],
     };
   } catch {
-    return { repos: [], activeRepo: null, settings: { ...defaultSettings }, expanded: [] };
+    return emptyStore();
   }
 }
 
@@ -66,6 +71,7 @@ function saveStore() {
       activeRepo: state.activeRepo,
       settings: state.settings,
       expanded: [...state.expanded],
+      bookmarks: state.bookmarks,
     }));
   } catch { /* storage full or disabled — the app still works, just forgets */ }
 }
@@ -81,6 +87,7 @@ const state = {
   activeRepo: persisted.activeRepo, // full_name of the selected repository
   settings: persisted.settings,
   expanded: new Set(persisted.expanded),
+  bookmarks: persisted.bookmarks,     // pinned documents, across repositories
   branches: [],
   tree: [],
   treeTruncated: false,
@@ -446,6 +453,7 @@ function setActiveDoc(doc) {
   editor.scrollTop = 0;
   renderDocHeader();
   renderTree();
+  renderBookmarks();
   schedulePreview(0);
   updateCounts();
 }
@@ -504,6 +512,118 @@ function renderRepoList() {
   }
 }
 
+/* ── Bookmarks ───────────────────────────────────────────────────────────── */
+
+const bookmarkKey = (b) => `${b.repo}@${b.branch}:${b.path}`;
+
+const findBookmark = (repoFullName, branch, path) =>
+  state.bookmarks.findIndex((b) => b.repo === repoFullName && b.branch === branch && b.path === path);
+
+/** toggleBookmark pins or unpins a document, returning true when now pinned. */
+function toggleBookmark(repoFullName, branch, path) {
+  if (!repoFullName) {
+    toast('Save this draft to a repository before bookmarking it.', 'error');
+    return false;
+  }
+  const at = findBookmark(repoFullName, branch, path);
+  if (at >= 0) {
+    state.bookmarks.splice(at, 1);
+  } else {
+    state.bookmarks.push({ repo: repoFullName, branch, path });
+  }
+  saveStore();
+  renderBookmarks();
+  renderDocHeader();
+  return at < 0;
+}
+
+function renderBookmarks() {
+  const list = $('bookmark-list');
+  const empty = $('bookmarks-empty');
+  list.textContent = '';
+
+  if (!state.bookmarks.length) {
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  for (const bookmark of state.bookmarks) {
+    const item = create('li', 'bookmark-item');
+    const connected = repoOf(bookmark.repo);
+    if (!connected) item.classList.add('missing');
+
+    const active = activeDoc();
+    if (active && active.repoFullName === bookmark.repo &&
+        active.branch === bookmark.branch && active.path === bookmark.path) {
+      item.classList.add('active');
+    }
+
+    item.appendChild(icon('i-bookmark-fill'));
+
+    const meta = create('div', 'bookmark-meta');
+    meta.appendChild(create('div', 'bookmark-name', baseName(bookmark.path)));
+    // Show enough context to tell two same-named files apart: the folder, plus
+    // the repository and branch whenever they are not the ones in view.
+    const where = [];
+    if (dirName(bookmark.path)) where.push(dirName(bookmark.path));
+    if (bookmark.repo !== state.activeRepo) where.push(bookmark.repo);
+    const repo = connected;
+    if (repo && bookmark.branch !== repo.branch) where.push(bookmark.branch);
+    meta.appendChild(create('div', 'bookmark-where',
+      connected ? (where.join(' · ') || bookmark.branch) : 'repository not connected'));
+    item.appendChild(meta);
+
+    const remove = create('button', 'bookmark-remove', '×');
+    remove.type = 'button';
+    remove.title = `Remove bookmark for ${bookmark.path}`;
+    remove.setAttribute('aria-label', remove.title);
+    remove.addEventListener('click', (event) => {
+      event.stopPropagation();
+      toggleBookmark(bookmark.repo, bookmark.branch, bookmark.path);
+    });
+    item.appendChild(remove);
+
+    item.title = `${bookmark.repo} · ${bookmark.branch} · ${bookmark.path}`;
+    item.addEventListener('click', () => openBookmark(bookmark));
+    list.appendChild(item);
+  }
+}
+
+/** openBookmark jumps to a pinned document, switching repository and branch when
+ *  the bookmark points somewhere other than the current view. */
+async function openBookmark(bookmark) {
+  const repo = repoOf(bookmark.repo);
+  if (!repo) {
+    toast(`${bookmark.repo} is not connected any more — reconnect it to open this bookmark.`, 'error');
+    return;
+  }
+
+  const branchChanged = repo.branch !== bookmark.branch;
+  if (branchChanged) {
+    repo.branch = bookmark.branch;
+    saveStore();
+  }
+
+  if (state.activeRepo !== bookmark.repo) {
+    await selectRepo(bookmark.repo);
+  } else if (branchChanged) {
+    renderBranches();
+    await loadTree(repo);
+  }
+
+  // Reveal the document's folder in the tree so its position is obvious.
+  let dir = dirName(bookmark.path);
+  while (dir) {
+    state.expanded.add(dir);
+    dir = dirName(dir);
+  }
+  saveStore();
+
+  await openDocument(bookmark.path);
+  renderBookmarks();
+}
+
 function renderBranches() {
   const select = $('branch-select');
   select.textContent = '';
@@ -532,6 +652,8 @@ function renderDocHeader() {
   const status = $('doc-status');
   const location = $('doc-location');
 
+  const bookmarkBtn = $('toggle-bookmark');
+
   if (!doc) {
     title.textContent = 'No document open';
     status.textContent = '—';
@@ -540,8 +662,19 @@ function renderDocHeader() {
     $('delete-document').disabled = true;
     $('commit-push').disabled = true;
     $('rename-document').disabled = true;
+    bookmarkBtn.disabled = true;
+    bookmarkBtn.classList.remove('active');
+    bookmarkBtn.setAttribute('aria-pressed', 'false');
     return;
   }
+
+  const pinned = !!doc.repoFullName && findBookmark(doc.repoFullName, doc.branch, doc.path) >= 0;
+  bookmarkBtn.disabled = !doc.repoFullName;
+  bookmarkBtn.classList.toggle('active', pinned);
+  bookmarkBtn.setAttribute('aria-pressed', String(pinned));
+  bookmarkBtn.title = pinned ? 'Remove bookmark' : 'Bookmark this document';
+  bookmarkBtn.setAttribute('aria-label', bookmarkBtn.title);
+  bookmarkBtn.querySelector('use').setAttribute('href', pinned ? '#i-bookmark-fill' : '#i-bookmark');
 
   title.textContent = baseName(doc.path);
   title.title = doc.path;
@@ -823,7 +956,13 @@ function showContextMenu(event, node) {
   };
 
   const folder = node.type === 'dir' ? node.path : dirName(node.path);
-  if (node.type === 'file') add('Open', () => openDocument(node.path, { pending: node.pending }));
+  if (node.type === 'file') {
+    add('Open', () => openDocument(node.path, { pending: node.pending }));
+    const pinned = findBookmark(repo.fullName, repo.branch, node.path) >= 0;
+    add(pinned ? 'Remove bookmark' : 'Bookmark', () => {
+      toggleBookmark(repo.fullName, repo.branch, node.path);
+    });
+  }
   add('New document here…', () => newDocument(folder));
   add('New folder here…', () => newFolder(folder));
   menu.appendChild(create('div', 'menu-sep'));
@@ -1995,6 +2134,23 @@ function wireEvents() {
     if (doc) renamePath({ path: doc.path, type: 'file' });
   });
 
+  // Pinning is offered in two places: the toolbar next to the document title,
+  // and the Bookmarks section header.
+  const pinActive = () => {
+    const doc = activeDoc();
+    if (!doc) {
+      toast('Open a document first.', 'error');
+      return;
+    }
+    const pinned = toggleBookmark(doc.repoFullName, doc.branch, doc.path);
+    if (doc.repoFullName) {
+      toast(pinned ? `Bookmarked ${baseName(doc.path)}.` : `Removed bookmark for ${baseName(doc.path)}.`,
+        'ok', { timeout: 2600 });
+    }
+  };
+  $('toggle-bookmark').addEventListener('click', pinActive);
+  $('bookmark-current').addEventListener('click', pinActive);
+
   $('toggle-sidebar').addEventListener('click', toggleSidebar);
   $('toggle-preview').addEventListener('click', togglePreview);
   $('toggle-zen').addEventListener('click', () => {
@@ -2132,6 +2288,7 @@ async function boot() {
   renderAccount();
   renderRepoList();
   restoreDrafts();
+  renderBookmarks();
   renderBranches();
   document.body.classList.remove('app-loading');
 

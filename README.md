@@ -32,6 +32,10 @@ database and no server-side state.
 - Create documents and folders, rename them, and drag them between folders. A
   folder move rewrites every file underneath it in a single commit.
 - Delete a file, or a folder and everything in it.
+- **Bookmarks** pin the documents you are working on. Use the bookmark button
+  next to the document title, the `+` in the Bookmarks header, or right-click a
+  file in the tree. A bookmark remembers its repository and branch, so opening
+  one switches to them if you are somewhere else.
 - Unsaved work is kept in your browser, so a reload does not lose a draft — even
   for a document you created but have not pushed yet.
 - A dot in the sidebar marks documents with unsaved changes.
