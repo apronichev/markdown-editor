@@ -131,8 +131,8 @@ vercel --prod
 
 Or push the repository to GitHub and import it at
 [vercel.com/new](https://vercel.com/new), then add the same three environment
-variables in the project settings. No build configuration is needed — Vercel
-detects the Go function in `api/` and serves `public/` statically.
+variables in the project settings. `vercel.json` already declares the build, so
+there is nothing to configure in the project settings.
 
 If you use a custom domain, also set `APP_BASE_URL` (for example
 `https://md.example.com`) so OAuth redirect URLs are pinned to it rather than
@@ -150,7 +150,7 @@ without a round trip:
 vercel build
 ```
 
-A successful run writes `.vercel/output/functions/api/index.func` — if that
+A successful run writes `.vercel/output/functions/api/index.go.func` — if that
 directory is missing, the API would not have been deployed.
 
 ### Why `vercel.json` uses `builds` instead of `functions`
