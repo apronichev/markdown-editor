@@ -89,6 +89,7 @@ const state = {
   expanded: new Set(persisted.expanded),
   bookmarks: persisted.bookmarks,     // pinned documents, across repositories
   branches: [],
+  githubURL: 'https://github.com',
   tree: [],
   treeTruncated: false,
   docs: new Map(),                 // key -> document
@@ -152,6 +153,28 @@ function redirectToLogin() {
 
 const repoPath = (repo, suffix = '') =>
   `/api/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}${suffix}`;
+
+/* ── Links to GitHub ─────────────────────────────────────────────────────── */
+
+/* The origin comes from the server rather than being hard-coded, so these links
+ * stay correct when the deployment points at GitHub Enterprise Server. */
+
+const repoWebURL = (repo) => `${state.githubURL}/${repo.owner}/${repo.name}`;
+
+const branchWebURL = (repo, branch) =>
+  `${repoWebURL(repo)}/tree/${encodeURIComponent(branch)}`;
+
+const dirWebURL = (repo, branch, dir) =>
+  `${repoWebURL(repo)}/tree/${encodeURIComponent(branch)}/${encodePath(dir)}`;
+
+const fileWebURL = (repo, branch, path) =>
+  `${repoWebURL(repo)}/blob/${encodeURIComponent(branch)}/${encodePath(path)}`;
+
+const historyWebURL = (repo, branch, path) =>
+  `${repoWebURL(repo)}/commits/${encodeURIComponent(branch)}/${encodePath(path)}`;
+
+/** encodePath escapes each segment but keeps the separators readable. */
+const encodePath = (path) => path.split('/').map(encodeURIComponent).join('/');
 
 /* ── Toasts ──────────────────────────────────────────────────────────────── */
 
@@ -497,6 +520,16 @@ function renderRepoList() {
 
     if (repo.private) item.appendChild(icon('i-lock', 'icon-lock'));
 
+    const open = create('a', 'repo-open');
+    open.href = repoWebURL(repo);
+    open.target = '_blank';
+    open.rel = 'noopener noreferrer';
+    open.title = `Open ${repo.fullName} on GitHub`;
+    open.setAttribute('aria-label', open.title);
+    open.appendChild(icon('i-external'));
+    open.addEventListener('click', (event) => event.stopPropagation());
+    item.appendChild(open);
+
     const remove = create('button', 'repo-remove', '×');
     remove.type = 'button';
     remove.title = `Disconnect ${repo.fullName}`;
@@ -646,6 +679,53 @@ function renderBranches() {
 
 /* ── Rendering: document header and counts ───────────────────────────────── */
 
+/** setGitHubLink points an anchor at GitHub, or disables it when there is
+ *  nothing to link to (an unpushed draft, or no document open). */
+function setGitHubLink(anchor, url) {
+  if (url) {
+    anchor.href = url;
+    anchor.removeAttribute('aria-disabled');
+    anchor.classList.remove('is-disabled');
+  } else {
+    anchor.removeAttribute('href');
+    anchor.setAttribute('aria-disabled', 'true');
+    anchor.classList.add('is-disabled');
+  }
+}
+
+/** renderLocationLinks writes "owner/repo · branch · folder" where each part is
+ *  a link to the matching page on GitHub. */
+function renderLocationLinks(location, repo, doc) {
+  location.textContent = '';
+
+  const link = (text, href, title) => {
+    const anchor = create('a', 'location-link', text);
+    anchor.href = href;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    anchor.title = title;
+    return anchor;
+  };
+  const separator = () => create('span', 'location-sep', ' · ');
+
+  location.appendChild(link(repo.fullName, repoWebURL(repo), `Open ${repo.fullName} on GitHub`));
+  location.appendChild(separator());
+  location.appendChild(link(doc.branch, branchWebURL(repo, doc.branch), `Browse the ${doc.branch} branch on GitHub`));
+
+  const dir = dirName(doc.path);
+  location.appendChild(separator());
+  if (dir) {
+    location.appendChild(link(dir, dirWebURL(repo, doc.branch, dir), `Open ${dir} on GitHub`));
+  } else {
+    location.appendChild(create('span', null, '/'));
+  }
+
+  if (doc.isNew) {
+    location.appendChild(separator());
+    location.appendChild(create('span', null, 'not pushed yet'));
+  }
+}
+
 function renderDocHeader() {
   const doc = activeDoc();
   const title = $('doc-title');
@@ -665,6 +745,9 @@ function renderDocHeader() {
     bookmarkBtn.disabled = true;
     bookmarkBtn.classList.remove('active');
     bookmarkBtn.setAttribute('aria-pressed', 'false');
+    $('reload-document').disabled = true;
+    setGitHubLink($('open-on-github'), null);
+    setGitHubLink($('open-history'), null);
     return;
   }
 
@@ -691,6 +774,18 @@ function renderDocHeader() {
   } else {
     status.textContent = 'Saved';
     status.className = 'doc-status is-saved';
+  }
+
+  // Only a document that exists on GitHub can be reloaded or linked to.
+  const repo = doc.repoFullName ? repoOf(doc.repoFullName) : null;
+  const onGitHub = !!repo && !doc.isNew;
+  $('reload-document').disabled = !onGitHub;
+  setGitHubLink($('open-on-github'), onGitHub ? fileWebURL(repo, doc.branch, doc.path) : null);
+  setGitHubLink($('open-history'), onGitHub ? historyWebURL(repo, doc.branch, doc.path) : null);
+
+  if (repo) {
+    renderLocationLinks(location, repo, doc);
+    return;
   }
 
   location.textContent = doc.repoFullName
@@ -1150,10 +1245,27 @@ async function openDocument(path, { pending = false } = {}) {
 
   const existing = state.docs.get(key);
   if (existing) {
-    setActiveDoc(existing);
-    return;
+    // The tree carries each file's blob SHA, so a refreshed tree tells us when a
+    // document we already hold has moved on remotely. Re-read a clean one rather
+    // than showing a stale copy, which is why remote edits used to seem invisible.
+    const remoteSHA = state.tree.find((n) => n.type === 'file' && n.path === path)?.sha;
+    const stale = !!remoteSHA && !!existing.sha && remoteSHA !== existing.sha;
+
+    if (!stale) {
+      setActiveDoc(existing);
+      return;
+    }
+    if (isDirty(existing)) {
+      // Never silently throw away unsaved work; say so and let them choose.
+      setActiveDoc(existing);
+      toast(`${baseName(path)} changed on GitHub. Use the reload button to take that version `
+        + '(your unsaved edits would be replaced).', 'info', { timeout: 9000 });
+      return;
+    }
+    state.docs.delete(key);
+  } else if (pending) {
+    return; // an unpushed file with no in-memory document is a bug, not a fetch
   }
-  if (pending) return; // an unpushed file with no in-memory document is a bug, not a fetch
 
   try {
     const params = new URLSearchParams({ path, ref: repo.branch });
@@ -1186,6 +1298,63 @@ async function openDocument(path, { pending = false } = {}) {
     setActiveDoc(doc);
   } catch (err) {
     if (err.status !== 401) failToast(err);
+  }
+}
+
+/** reloadDocument replaces the open document with the version currently on
+ *  GitHub. Unsaved edits are never discarded without asking. */
+async function reloadDocument() {
+  const doc = activeDoc();
+  if (!doc) return;
+
+  if (!doc.repoFullName || doc.isNew) {
+    toast('This document is not on GitHub yet, so there is nothing to reload.', 'error');
+    return;
+  }
+  const repo = repoOf(doc.repoFullName);
+  if (!repo) {
+    toast('That repository is no longer connected.', 'error');
+    return;
+  }
+
+  const button = $('reload-document');
+  busy(button, true);
+  try {
+    const params = new URLSearchParams({ path: doc.path, ref: doc.branch });
+    const file = await api(repoPath(repo, `/file?${params}`));
+
+    if (file.content === doc.content && file.sha === doc.sha) {
+      toast('Already up to date with GitHub.', 'info', { timeout: 2600 });
+      return;
+    }
+    if (isDirty(doc) && file.content !== doc.content) {
+      const confirmed = await confirmDialog({
+        title: 'Discard your unsaved changes?',
+        body: `${doc.path} has unsaved edits. Loading the version from GitHub will replace them, `
+          + 'and that cannot be undone from here.',
+        confirmLabel: 'Discard and reload',
+      });
+      if (!confirmed) return;
+    }
+
+    doc.content = file.content;
+    doc.baseContent = file.content;
+    doc.sha = file.sha;
+    doc.shownDirty = false;
+    dropDraft(doc);
+    setActiveDoc(doc);
+
+    // Pick up files added or removed on the remote at the same time.
+    await loadTree(repo);
+    toast(`Reloaded ${baseName(doc.path)} from GitHub.`, 'ok', { timeout: 3200 });
+  } catch (err) {
+    if (err.status === 404) {
+      toast(`${doc.path} no longer exists on ${doc.branch}.`, 'error');
+    } else if (err.status !== 401) {
+      failToast(err);
+    }
+  } finally {
+    busy(button, false);
   }
 }
 
@@ -2133,6 +2302,14 @@ function wireEvents() {
     const doc = activeDoc();
     if (doc) renamePath({ path: doc.path, type: 'file' });
   });
+  $('reload-document').addEventListener('click', reloadDocument);
+
+  // Disabled anchors still receive clicks, so stop them navigating to "#".
+  for (const id of ['open-on-github', 'open-history']) {
+    $(id).addEventListener('click', (event) => {
+      if (!event.currentTarget.getAttribute('href')) event.preventDefault();
+    });
+  }
 
   // Pinning is offered in two places: the toolbar next to the document title,
   // and the Bookmarks section header.
@@ -2285,6 +2462,7 @@ async function boot() {
 
   state.user = { login: me.login, name: me.name, avatarUrl: me.avatar_url };
   state.csrf = me.csrf_token;
+  state.githubURL = me.github_url || 'https://github.com';
   renderAccount();
   renderRepoList();
   restoreDrafts();

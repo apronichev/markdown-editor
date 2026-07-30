@@ -36,6 +36,12 @@ database and no server-side state.
   next to the document title, the `+` in the Bookmarks header, or right-click a
   file in the tree. A bookmark remembers its repository and branch, so opening
   one switches to them if you are somewhere else.
+- **Reload from GitHub** re-reads the open file with the button beside its title.
+  Reopening a file after refreshing the tree also picks up remote changes on its
+  own. Unsaved edits are never replaced without asking first.
+- Links out to GitHub: the file, its commit history, the repository, the branch
+  and the containing folder. They point at GitHub Enterprise Server correctly
+  when `GITHUB_API_BASE_URL` is set.
 - Unsaved work is kept in your browser, so a reload does not lose a draft — even
   for a document you created but have not pushed yet.
 - A dot in the sidebar marks documents with unsaved changes.

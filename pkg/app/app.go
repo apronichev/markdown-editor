@@ -125,6 +125,8 @@ func (a *App) handleMe(w http.ResponseWriter, r *http.Request) {
 		"name":          sess.Name,
 		"avatar_url":    sess.AvatarURL,
 		"csrf_token":    sess.CSRF,
+		// Lets the UI build links to GitHub that also work on Enterprise.
+		"github_url": a.cfg.GitHubWebURL(),
 	})
 }
 

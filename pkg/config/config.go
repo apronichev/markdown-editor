@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -71,6 +72,22 @@ func (c *Config) Ready() bool {
 
 // Secure reports whether cookies should carry the Secure flag.
 func (c *Config) Secure() bool { return !c.Dev }
+
+// GitHubWebURL is the origin for human-facing GitHub links, derived from the API
+// root so links stay correct on GitHub Enterprise Server. api.github.com maps to
+// github.com; an Enterprise API root such as https://git.acme.com/api/v3 maps
+// back to https://git.acme.com.
+func (c *Config) GitHubWebURL() string {
+	const publicAPI = "https://api.github.com"
+	if c.GitHubAPIBaseURL == "" || c.GitHubAPIBaseURL == publicAPI {
+		return "https://github.com"
+	}
+	base := strings.TrimSuffix(strings.TrimRight(c.GitHubAPIBaseURL, "/"), "/api/v3")
+	if parsed, err := url.Parse(base); err == nil && parsed.Host != "" {
+		return parsed.Scheme + "://" + parsed.Host
+	}
+	return base
+}
 
 // BaseURLFor resolves the externally visible origin for this request, preferring
 // the explicit APP_BASE_URL so a spoofed Host header cannot rewrite OAuth URLs.

@@ -571,8 +571,39 @@ body.app-loading .app { opacity: 0; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 44ch;
+  max-width: 52ch;
 }
+
+.location-link { color: var(--ink-dim); text-decoration: none; }
+.location-link:hover { color: #0969da; text-decoration: underline; }
+.location-sep { opacity: 0.55; }
+
+/* Anchors styled as icon buttons need the disabled state spelled out, since
+   :disabled does not apply to them. */
+.icon-btn.is-disabled {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: default;
+}
+
+.icon-btn:disabled { opacity: 0.35; cursor: default; }
+.icon-btn.is-busy .icon { animation: spin 700ms linear infinite; }
+
+/* Link out to a connected repository, next to its disconnect button. */
+.repo-open {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  color: var(--sidebar-fg-dim);
+  border-radius: 3px;
+  opacity: 0;
+}
+
+.repo-open .icon { width: 12px; height: 12px; }
+.repo-item:hover .repo-open { opacity: 1; }
+.repo-open:hover { color: var(--accent); background: var(--sidebar-hover); }
 
 /* ── Panes ───────────────────────────────────────────────────────────────── */
 .panes {
